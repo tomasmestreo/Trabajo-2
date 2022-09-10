@@ -1,0 +1,115 @@
+---
+title: "Trabajo Bici"
+author: "Tomas Mestre"
+date: "2022-08-10"
+output: html_document
+---
+Instalo las librerias que voy a necesitar para poder establecer los mapeos solicitados y pongo en uso las mismas 
+
+```{r}
+library(tidyverse)
+```
+```{r}
+library(sf)
+```
+```{r}
+library(readr)
+```
+
+```{r}
+library(ggmap)
+```
+```{r}
+library(leaflet)
+```
+
+Voy a buscar el código de enrutado del archivo a utilizar
+
+```{r}
+file.choose()
+```
+Creo la carpeta solicitada, segmento la base adentro y leo el csv
+```{r}
+Datos2021 = read.csv("C:\\Users\\User\\Documents\\UTDT\\TP2\\Datos\\trips_2021.csv")
+```
+
+ 
+```{r}
+str(Datos2021)
+```
+
+ Vamos a manipular los datos ya que el campo HORA nos incluye datos que hacen referencia a la fecha.
+                             
+```{r}
+Datos21 = mutate (Datos2021,
+            ANO = substr(fecha_origen_recorrido,1,4),
+            MES = substr(fecha_origen_recorrido,6,7),
+            DIA = substr(fecha_origen_recorrido,9,10),
+              HORA = substr(fecha_origen_recorrido, 12,16))
+```
+ 
+ Dado que mi interés era realizar con base 2022 y todavía no es pública elijo Octubre como lo más parecido a un mes normal de la Ciudad.
+ 
+```{r}
+Octubre21 = Datos21 %>% 
+  filter(MES == "10") %>% 
+  rename(Origen=nombre_estacion_origen) %>% 
+  rename (Destino= nombre_estacion_destino)
+```
+ 
+ Para poder visibilizar el flujo mensual de viajes, agrupo la información de Origen a Destino.
+ 
+```{r}
+Conteo = Octubre21 %>% 
+group_by(Origen,long_estacion_origen, lat_estacion_origen, Destino, long_estacion_destino, lat_estacion_destino) %>% 
+  summarise(total=n()) %>% 
+  arrange(total)
+``` 
+Al ver que más del 70% de los viajes son circulares decidimos establecer un top 10 de viajes no circulares
+```{r}
+top10N <- Conteo %>% 
+    ungroup() %>% 
+    filter(Origen != Destino) %>% 
+    top_n(10)
+```
+
+```{r}
+ggplot() + 
+    geom_tile(data = top10N, 
+              aes(y = as.factor(Origen),
+                  x = as.factor(Destino),
+                  fill = total)) +
+    scale_fill_distiller(palette = "Spectral")
+```
+
+
+Leo una base de datos de espacios verdes en CABA.
+```{r}
+Espacio_verde= read.csv("https://cdn.buenosaires.gob.ar/datosabiertos/datasets/secretaria-de-desarrollo-urbano/espacios-verdes/espacio_verde_publico.csv")
+```
+Establezco una caja que corresponda a las estaciones que hay en la ciudad y luego lo mapeo marcando cada estación con Naranja.
+```{r}
+bbox = make_bbox(Octubre21$long_estacion_origen, Octubre21$lat_estacion_origen)
+
+bbox
+```
+ Ahora establecemos un mapeo de las estaciones que existen
+```{r}
+mapa = get_stamenmap(bbox, color ="bw", zoom = 12)
+
+ggmap(mapa) +
+  geom_point(data= Conteo, aes(x= long_estacion_origen, y= lat_estacion_origen), color = "orange")
+```
+
+```{r}
+  Conteo2 = Octubre21 %>% 
+  group_by(Origen,long_estacion_origen, lat_estacion_origen) %>% 
+  summarise(total=n()) %>% 
+  arrange(total)
+```
+Ya trabajado la cantidad de viajes de origen por estación decidimos mapearlo y cada punto estara ajustado al tamaño de la cantidad de viajes establecidos. Es decir a más grande el punto mas viajes originados en estación. Decidimos sacarle todas las leyendas para que se visibilice esto de manera instuituva y no dar información sobre cantidad minima y maxima de viajes por estación de origen.
+```{r}
+ggmap(mapa) +
+  geom_point(data= Conteo2, aes(x= long_estacion_origen, y= lat_estacion_origen, color = "red", size= total))+
+  theme_nothing()
+```
